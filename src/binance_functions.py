@@ -2,8 +2,8 @@ import hmac
 import time
 import hashlib
 import requests
-import credentials
 import pandas as pd
+from src import credentials
 from urllib.parse import urlencode
 
 """

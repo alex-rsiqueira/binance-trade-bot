@@ -4,8 +4,8 @@ import json
 #import talib
 import numpy
 import pandas as pd
-import credentials
-import binance_functions
+from src import credentials
+from src import binance_functions
 
 # import config
 from binance.client import Client
