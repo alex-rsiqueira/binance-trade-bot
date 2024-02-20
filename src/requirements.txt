@@ -3,3 +3,4 @@ pandas>=2.2.0
 python-binance>=1.0.19
 google-cloud-storage>=2.1.0
 google-cloud-secret-manager==2.10.0
+websocket-client>=1.7.0
