@@ -14,7 +14,7 @@ from binance.enums import *
 def order(side, quantity, symbol,order_type=ORDER_TYPE_MARKET):
     try:
         print("sending order")
-        # order = client.create_order(symbol=symbol, side=side, type=order_type, quantity=quantity)
+        order = client.create_order(symbol=symbol, side=side, type=order_type, quantity=quantity)
         print(order)
         
     except Exception as e:
@@ -97,22 +97,22 @@ def on_message(ws, message):
                         TRADE_QUANTITY = profit_value / close
                         
                         # create sell order
-                        # order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, TRADE_SYMBOL)                    
-                        # if order_succeeded:
-                        #     in_position = False 
-                        in_position = False
+                        order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, TRADE_SYMBOL)                    
+                        if order_succeeded:
+                            in_position = False 
+                        # in_position = False
                     else:
 
                         print('In position to sell, but there''s no profit over the baseline')
                 else:
-                    # df.at[i, 'position'] = 'DOI'
+                    df_closes.loc[df_closes.index[-1], 'position'] = 'DOI'
                     print('In position to sell, but don''t on it yet')
                     
             elif rsi < RSI_OVERSOLD:
                 
                 if in_position:
                     print('In position to buy, but already have it')
-                    # df.at[i, 'position'] = 'HOLD'
+                    df_closes.loc[df_closes.index[-1], 'position'] = 'HOLD'
                 else:
                     
                     # get BRL free balance
@@ -124,12 +124,12 @@ def on_message(ws, message):
                         TRADE_QUANTITY = brl_balance / close
                         
                         # create buy order
-                        # order_succeeded = order(SIDE_BUY, TRADE_QUANTITY, TRADE_SYMBOL)
-                        # if order_succeeded:
-                        #     in_position = True
-                        in_position = True
+                        order_succeeded = order(SIDE_BUY, TRADE_QUANTITY, TRADE_SYMBOL)
+                        if order_succeeded:
+                            in_position = True
+                        # in_position = True
 
-                        # df.at[i, 'position'] = 'BOUGHT'
+                        df_closes.loc[df_closes.index[-1], 'position'] = 'BOUGHT'
 
                     else:
                         
@@ -137,12 +137,12 @@ def on_message(ws, message):
             else:
                 #RSI entre overbought e oversold
                 print('No position to take')
-                # df.at[i, 'position'] = 'HOLD'
+                df_closes.loc[df_closes.index[-1], 'position'] = 'HOLD'
             
             #CLEAR CLOSES LIST TO MANTAIN LAST 22 LINES ONLY
             closes.pop(0)
 
-            df_closes.to_csv('operations_log.csv', mode='a', header=False, index=False)
+            df_closes.loc[df_closes.index[-1]].to_csv('operations_log.csv', mode='a', header=False, index=False)
 
 if _name_ == '_main_':
         
