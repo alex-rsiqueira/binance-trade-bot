@@ -19,7 +19,7 @@ def read_secret(secret_name):
 
     return secret_value
 
-if _name_ == '_main_':
+if __name__ == '_main_':
     secret_data = read_secret('binance-cred')
 
     app_key = secret_data['app_key']

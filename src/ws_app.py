@@ -144,7 +144,7 @@ def on_message(ws, message):
 
             df_closes.loc[df_closes.index[-1]].to_csv('operations_log.csv', mode='a', header=False, index=False)
 
-if _name_ == '_main_':
+if __name__ == '_main_':
         
     SOCKET = "wss://stream.binance.com:9443/ws/btcbrl@kline_1m"
 
