@@ -14,8 +14,8 @@ Because USER_DATA endpoints require signature:
 
 """
 
-KEY = credentials.app_key
-SECRET = credentials.app_secret
+KEY = credentials.APP_KEY
+SECRET = credentials.APP_SECRET
 BASE_URL = "https://api.binance.com"  # production base url
 # BASE_URL = 'https://testnet.binance.vision' # testnet base url
 
