@@ -3,7 +3,7 @@ import time
 import hashlib
 import requests
 import pandas as pd
-from src import credentials
+import credentials
 from urllib.parse import urlencode
 
 """
