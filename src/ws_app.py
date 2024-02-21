@@ -9,7 +9,7 @@ import binance_functions
 import datetime
 
 # import config
-from binance.client import Client
+from binance.client import Client, BinanceAPIException
 from binance.enums import *
 
 def order(side, quantity, symbol,order_type=ORDER_TYPE_MARKET):
@@ -257,5 +257,10 @@ if __name__ == '__main__':
     # start app
     print(' --- Hello World! We are starting! ---')
 
-    ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
-    ws.run_forever()
+    try:
+        ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
+        ws.run_forever()
+    except BinanceAPIException as e:
+        print(f'Error: {e}')
+        
+    print('End script')
