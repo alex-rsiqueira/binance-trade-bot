@@ -3,6 +3,8 @@ from google.cloud import secretmanager
 
 PROJECT_ID = os.environ.get("PROJECT_ID")
 
+print(f'Current GCP project: {PROJECT_ID}')
+
 def read_secret(secret_name):
 
     # Instantiate Secret Manager client
