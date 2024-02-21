@@ -1,7 +1,7 @@
 import os
 from google.cloud import secretmanager
 
-PROJECT_ID = 'cripto-trade-2024' #os.environ.get("PROJECT_ID")
+PROJECT_ID = '578937709678' #os.environ.get("PROJECT_ID")
 
 print(f'Current GCP project: {PROJECT_ID}')
 
