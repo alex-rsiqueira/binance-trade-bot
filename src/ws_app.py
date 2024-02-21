@@ -258,9 +258,12 @@ if __name__ == '__main__':
     print(' --- Hello World! We are starting! ---')
 
     try:
+        print('Declare WebSocket')
         ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
+        print('Run WebSocket - Start')
         ws.run_forever()
+        print('Run WebSocket - End')
     except BinanceAPIException as e:
         print(f'Error: {e}')
-        
+
     print('End script')
