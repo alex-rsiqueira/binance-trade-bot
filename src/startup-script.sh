@@ -9,6 +9,7 @@ sudo python3 get-pip.py
 # Fetch source code
 export HOME=/root
 sudo git clone https://github.com/alex-rsiqueira/binance-trade-bot.git /opt/app
+sudo git config --global --add safe.directory /opt/app
 
 # Install Cloud Ops Agent
 sudo bash /opt/app/src/add-google-cloud-ops-agent-repo.sh --also-install

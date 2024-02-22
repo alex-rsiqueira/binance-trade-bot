@@ -17,7 +17,7 @@ def read_secret(secret_name):
     response = client.access_secret_version(request={"name": name})
 
     # Decode secret content
-    secret_value = response.payload.data.decode("UTF-8")
+    secret_value = dict(response.payload.data.decode("UTF-8"))
 
     return secret_value
 
