@@ -1,29 +1,221 @@
 import websocket
 import json
-import pprint
-#import talib
-import numpy
+import numpy as np
 import pandas as pd
 import credentials as cd
 import binance_functions
-import datetime
 
-# import config
 from binance.client import Client, BinanceAPIException
 from binance.enums import *
 
-def order(side, quantity, symbol,order_type=ORDER_TYPE_MARKET):
-    try:
-        print("sending order")
-        order = client.create_order(symbol=symbol, side=side, type=order_type, quantity=quantity)
-        print(order)
-        
-    except Exception as e:
-        print("an exception occured - {}".format(e))
-        return False
+price_list = []
+df_prices = pd.DataFrame(columns =['close', 'var', 'positivo'
+                                       , 'negativo', 'media_positivos', 'media_negativo' 
+                                       ,'position','quantity','symbol'
+                                       ,'btc_balance','btcbrl_balance'
+                                       ,'profit_value' ,'in_position_after'])
+SIMULATE_FLG = True
 
+def order(side, quantity, symbol,order_type=ORDER_TYPE_MARKET):
+    if not SIMULATE_FLG:
+        try:
+            print("sending order")
+            order = client.create_order(symbol=symbol, side=side, type=order_type, quantity=quantity)
+            print(order)
+            
+        except Exception as e:
+            print("an exception occured - {}".format(e))
+            return False
+        
     return True
 
+## PARA TESTAR A LÓGICA SEM CHAMAR WEBSOCKET
+def random_test(df_prices, closes, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD):
+    
+    close_lst = np.random.randint(240000, 260000, size=(1000))
+    
+    for close in close_lst:
+        
+        process_new_price(close, df_prices, close_lst, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD)
+
+
+def calculate_rsi(close_prices, rsi_period):
+    """
+    Calcula o Índice de Força Relativa (RSI) com base nos preços de fechamento e no período especificado.
+    """
+    # Calcula as variações dos preços de fechamento
+    price_diff = close_prices.diff()
+
+    # Separa as variações em positivas e negativas
+    gain = price_diff.where(price_diff > 0, 0)
+    loss = -price_diff.where(price_diff < 0, 0)
+
+    # Calcula as médias móveis dos ganhos e das perdas
+    avg_gain = gain.rolling(window=rsi_period).mean()
+    avg_loss = loss.rolling(window=rsi_period).mean()
+
+    # Calcula o RSI
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.iloc[-1]  # Retorna apenas o último valor do RSI
+
+def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD):
+    """
+    Processa um novo preço recebido, atualiza o DataFrame de preços e verifica sinais de negociação com base no RSI.
+    """
+    #price_list.append(float(close))
+
+    # Adiciona o preço de fechamento ao DataFrame
+    df_prices.loc[len(df_prices)] = {'close': float(close), 'RSI': None, 'compra': False, 'venda': False}
+
+    if len(price_list) >= RSI_PERIOD:
+        # Calcula o RSI para a última linha
+        rsi = calculate_rsi(df_prices['close'], RSI_PERIOD)
+
+        # Atualiza o DataFrame com o valor de RSI calculado
+        df_prices.at[len(df_prices) - 1, 'RSI'] = rsi
+
+        # Calcula outras métricas
+        df_prices['var'] = df_prices['close'].pct_change()
+        df_prices['positivo'] = df_prices['var'].apply(lambda x: x if x > 0 else 0)
+        df_prices['negativo'] = df_prices['var'].apply(lambda x: abs(x) if x < 0 else 0)
+        df_prices['media_positivos'] = df_prices['positivo'].rolling(window=RSI_PERIOD).mean()
+        df_prices['media_negativo'] = df_prices['negativo'].rolling(window=RSI_PERIOD).mean()
+
+        # Verifica os sinais de negociação com base no RSI e na variável in_position
+        if rsi > RSI_OVERBOUGHT and in_position:
+            print(f'RSI: {rsi} > RSI_OVERBOUGHT: {RSI_OVERBOUGHT}. Vendendo...')
+            
+            # get BTC free balance
+            btc_balance = binance_functions.get_balance('BTC')
+            print('btc_balance: ', btc_balance)
+
+            # convert BTC balance to BRL
+            btcbrl_balance = close * btc_balance
+            print('btcbrl_balance: ', btcbrl_balance)
+
+            # get profit compared to baseline
+            profit_value = btcbrl_balance - baseline
+            print('profit_value: ', profit_value)
+
+            # Get BRL balance before order
+            brl_balance_before = binance_functions.get_balance('BRL')
+            
+            if profit_value >= (baseline * 0.01):
+
+                # convert profit in BRL to BTC
+                TRADE_QUANTITY = profit_value / close
+                
+                df_prices['in_position_before'] = in_position
+                # create sell order
+                order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, TRADE_SYMBOL)                    
+                if order_succeeded:
+                    print('VENDEU!')
+                    in_position = False 
+
+                # Get BRL balance after order
+                brl_balance_after = binance_functions.get_balance('BRL')
+                
+                print(f'RSI: {rsi} > RSI_OVERBOUGHT: {RSI_OVERBOUGHT}. Vendendo...')
+                df_prices.at[len(df_prices) - 1, 'hold'] = False
+                df_prices.at[len(df_prices) - 1, 'venda'] = True
+                df_prices['position'] = 'SELL'
+                df_prices['quantity'] = TRADE_QUANTITY
+                df_prices['symbol'] = TRADE_SYMBOL
+                df_prices['brl_balance_before'] = brl_balance_before
+                df_prices['brl_balance_after'] = brl_balance_after
+                df_prices['btc_balance'] = btc_balance
+                df_prices['btcbrl_balance'] = btcbrl_balance
+                df_prices['profit_value'] = profit_value
+                df_prices['in_position_after'] = in_position
+            else:
+
+                print('In position to sell, but there''s no profit over the baseline')
+                df_prices['position'] = 'SIDE_SELL_NO_PROFITS'
+                df_prices['quantity'] = TRADE_QUANTITY
+                df_prices['symbol'] = TRADE_SYMBOL
+                df_prices['brl_balance_before'] = brl_balance_before
+                df_prices['btc_balance'] = btc_balance
+                df_prices['btcbrl_balance'] = btcbrl_balance
+                df_prices['profit_value'] = profit_value
+                df_prices['in_position_after'] = in_position
+        
+        elif rsi > RSI_OVERBOUGHT and not in_position:
+            print(f'RSI: {rsi} > RSI_OVERBOUGHT: MAS NÃO ESTAMOS EM POSIÇÃO. HOLD...')
+            df_prices.at[len(df_prices) - 1, 'hold'] = True
+            df_prices['position'] = 'SIDE_SELL_DONT_OWN_YET'
+        
+        elif rsi < RSI_OVERSOLD and not in_position:
+            # get BTC free balance
+            btc_balance = binance_functions.get_balance('BTC')
+            
+            # convert BTC balance to BRL
+            btcbrl_balance = close * btc_balance
+
+            # get profit compared to baseline
+            profit_value = btcbrl_balance - baseline
+
+            # get BRL free balance
+            brl_balance_before = binance_functions.get_balance('BRL')
+            print('brl_balance: ', brl_balance_before)
+            if brl_balance_before > 0:
+        
+                # convert BRL balance to BTC
+                TRADE_QUANTITY = brl_balance_before / close
+                
+                df_prices['position'] = 'SIDE_BUY_ALREADY_OWN'
+
+                # create buy order
+                order_succeeded = order(SIDE_BUY, TRADE_QUANTITY, TRADE_SYMBOL)
+
+                df_prices['in_position_before'] = in_position
+
+                if order_succeeded:
+                    in_position = True
+
+                # Get BRL balance after order
+                brl_balance_after = binance_functions.get_balance('BRL')
+                
+                print(f'RSI: {rsi} < RSI_OVERSOLD: {RSI_OVERSOLD}. Comprando...')
+                df_prices.at[len(df_prices) - 1, 'hold'] = False
+                df_prices.at[len(df_prices) - 1, 'compra'] = True
+                df_prices['position'] = 'BUY'
+                df_prices['quantity'] = TRADE_QUANTITY
+                df_prices['symbol'] = TRADE_SYMBOL
+                df_prices['brl_balance_before'] = brl_balance_before
+                df_prices['brl_balance_after'] = brl_balance_after
+                df_prices['btc_balance'] = btc_balance
+                df_prices['btcbrl_balance'] = btcbrl_balance
+                df_prices['profit_value'] = profit_value
+                df_prices['in_position_after'] = in_position
+
+            else:
+                
+                print(f'RSI: {rsi} < RSI_OVERSOLD: MAS NÃO TEMOS SALDO SUFICIENTE. HOLD...')
+                df_prices['position'] = 'SIDE_BUY_NO_BALANCE'
+                df_prices['quantity'] = TRADE_QUANTITY
+                df_prices['symbol'] = TRADE_SYMBOL
+                df_prices['brl_balance_before'] = brl_balance_before
+                df_prices['btc_balance'] = btc_balance
+                df_prices['btcbrl_balance'] = btcbrl_balance
+                df_prices['profit_value'] = profit_value
+                df_prices['in_position_after'] = in_position
+        
+        elif rsi < RSI_OVERSOLD and in_position:
+            print(f'RSI: {rsi} < RSI_OVERSOLD: MAS JÁ ESTAMOS EM POSIÇÃO. HOLD...')
+            df_prices.at[len(df_prices) - 1, 'hold'] = True
+
+        else:
+            print(f'RSI: {rsi} entre os indicadores: HOLD... ')
+            df_prices.at[len(df_prices) - 1, 'hold'] = True
+        
+        # WRITES LAST LINE ON CSV
+        last_close = df_prices.iloc[-1:]
+        if len(closes) == (RSI_PERIOD + 1):
+            last_close.to_csv('positions.csv', header=True, index=False)
+            print('--- CRIOU O CSV ---')
+        else:
+            last_close.to_csv('positions.csv', mode='a', header=False, index=False)
     
 def on_open(ws):
     print('opened connection')
@@ -32,238 +224,50 @@ def on_close(ws):
     print('closed connection')
 
 def on_message(ws, message):
-    global closes, in_position
+    """
+    Função de callback chamada quando uma nova mensagem é recebida pelo WebSocket.
+    Processa a mensagem JSON para obter o preço de fechamento e chama a função de processamento de preço.
+    """
     
-    print('received message')
     json_message = json.loads(message)
-    
     candle = json_message['k']
-
     is_candle_closed = candle['x']
     close = candle['c']
     
     if not is_candle_closed:
-        print("candle closed at {} ' --- closes: ', {}".format(close, len(closes)))
-
-        closes.append(float(close))
-        # print(len(closes))
-
-        # print("closes")
-        # print(' --- closes: ', len(closes))
-
-        if len(closes) > RSI_PERIOD:
-            print('started df')
-
-            df_closes.loc[len(df_closes)] = {'close': float(close)}
-
-            df_closes['var'] = df_closes['close'].pct_change()
-            df_closes['positivo'] = df_closes['var'].apply(lambda x : x if x > 0 else 0)
-            df_closes['negativo'] = df_closes['var'].apply(lambda x : abs(x) if x < 0 else 0)
-
-            #create RSI Column
-            df_closes['media_positivos'] = df_closes['positivo'].rolling(window=RSI_PERIOD).mean()
-            df_closes['media_negativo'] = df_closes['negativo'].rolling(window=RSI_PERIOD).mean()
-
-            # dropping first 22 lines wich are NaN
-            rsi = (100 -  100 /
-                        (1+df_closes['media_positivos']/df_closes['media_negativo'])
-                        )
-
-            df_closes['RSI'] = rsi
-            
-            print("the current rsi is {}".format(rsi))
-            print("the RSI_OVERBOUGHT is {}".format(RSI_OVERBOUGHT))
-            print("the RSI_OVERSOLD is {}".format(RSI_OVERSOLD))
-
-
-            if rsi > RSI_OVERBOUGHT and in_position:
-                
-                if in_position:
-                    print('QUER VENDER E ESTÁ EM POSIÇÃO!')
-                    
-                    # get BTC free balance
-                    btc_balance = binance_functions.get_balance('BTC')
-                    print('btc_balance: ', btc_balance)
-                    # convert BTC balance to BRL
-                    btcbrl_balance = close * btc_balance
-                    print('btcbrl_balance: ', btcbrl_balance)
-
-                    # get profit compared to baseline
-                    profit_value = btcbrl_balance - baseline
-                    print('profit_value: ', profit_value)
-                    
-                    if profit_value > 0:
-
-                        # convert profit in BRL to BTC
-                        TRADE_QUANTITY = profit_value / close
-                        
-                        df_closes['in_position_before'] = in_position
-                        # create sell order
-                        order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, TRADE_SYMBOL)                    
-                        if order_succeeded:
-                            print('VENDEU!')
-                            in_position = False 
-                        
-                        df_closes['position'] = 'SELL'
-                        df_closes['quantity'] = TRADE_QUANTITY
-                        df_closes['symbol'] = TRADE_SYMBOL
-                        df_closes['btc_balance'] = btc_balance
-                        df_closes['btcbrl_balance'] = btcbrl_balance
-                        df_closes['profit_value'] = profit_value
-                        df_closes['in_position_after'] = in_position
-
-                    else:
-
-                        print('In position to sell, but there''s no profit over the baseline')
-                        df_closes['position'] = 'SIDE_SELL_NO_PROFITS'
-                        df_closes['quantity'] = TRADE_QUANTITY
-                        df_closes['symbol'] = TRADE_SYMBOL
-                        df_closes['btc_balance'] = btc_balance
-                        df_closes['btcbrl_balance'] = btcbrl_balance
-                        df_closes['profit_value'] = profit_value
-                        df_closes['in_position_after'] = in_position
-                else:
-                    
-                        print('In position to sell, but don''t on it yet')
-                        df_closes['position'] = 'SIDE_SELL_DONT_OWN_YET'
-                        df_closes['quantity'] = TRADE_QUANTITY
-                        df_closes['symbol'] = TRADE_SYMBOL
-                        df_closes['btc_balance'] = btc_balance
-                        df_closes['btcbrl_balance'] = btcbrl_balance
-                        df_closes['profit_value'] = profit_value
-                        df_closes['in_position_after'] = in_position
-                    
-            elif rsi < RSI_OVERSOLD:
-                
-                btc_balance = binance_functions.get_balance('BTC')
-
-                btcbrl_balance = close * btc_balance
-
-                # get profit compared to baseline
-                profit_value = btcbrl_balance - baseline
-                
-                if in_position:
-                    
-                    print('In position to buy, but already have it')
-
-                    df_closes['position'] = 'SIDE_BUY_ALREADY_OWN'
-                    df_closes['quantity'] = TRADE_QUANTITY
-                    df_closes['symbol'] = TRADE_SYMBOL
-                    df_closes['btc_balance'] = btc_balance
-                    df_closes['btcbrl_balance'] = btcbrl_balance
-                    df_closes['profit_value'] = profit_value
-                    df_closes['in_position_after'] = in_position
-                else:
-                    
-                    # get BRL free balance
-                    brl_balance = binance_functions.get_balance('BRL')
-                    print('brl_balance: ', brl_balance)
-                    if brl_balance > 0:
-                
-                        # convert BRL balance to BTC
-                        TRADE_QUANTITY = brl_balance / close
-                        
-                        df_closes['position'] = 'SIDE_BUY_ALREADY_OWN'
-
-                        # create buy order
-                        order_succeeded = order(SIDE_BUY, TRADE_QUANTITY, TRADE_SYMBOL)
-
-                        df_closes['in_position_before'] = in_position
-
-                        if order_succeeded:
-                            in_position = True
-                        
-                        df_closes['position'] = 'BUY'
-                        df_closes['quantity'] = TRADE_QUANTITY
-                        df_closes['symbol'] = TRADE_SYMBOL
-                        df_closes['btc_balance'] = btc_balance
-                        df_closes['btcbrl_balance'] = btcbrl_balance
-                        df_closes['profit_value'] = profit_value
-                        df_closes['in_position_after'] = in_position
-
-                    else:
-                        
-                        print('In position to buy, but don''t have enough balance')
-                        df_closes['position'] = 'SIDE_BUY_NO_BALANCE'
-                        df_closes['quantity'] = TRADE_QUANTITY
-                        df_closes['symbol'] = TRADE_SYMBOL
-                        df_closes['btc_balance'] = btc_balance
-                        df_closes['btcbrl_balance'] = btcbrl_balance
-                        df_closes['profit_value'] = profit_value
-                        df_closes['in_position_after'] = in_position
-            else:
-                #RSI entre overbought e oversold
-                print('No position to take')
-                df_closes['position'] = 'HOLD'
-                df_closes['quantity'] = TRADE_QUANTITY
-                df_closes['symbol'] = TRADE_SYMBOL
-                df_closes['btc_balance'] = btc_balance
-                df_closes['btcbrl_balance'] = btcbrl_balance
-                df_closes['profit_value'] = profit_value
-                df_closes['in_position_after'] = in_position
-                
-                if len(closes) == (RSI_PERIOD + 1):
-                    last_close.to_csv('positions.csv', index=False)
-                    print('--- CRIOU O CSV ---')
-                else:
-                    last_close = df_closes.iloc[-1:]
-                    # WRITES LAST LINE ON CSV
-                    last_close.to_csv('positions.csv', mode='a', header=True, index=False)
-
-            # WRITES LAST LINE ON CSV
-            last_close.to_csv('positions.csv', mode='a', header=True, index=False)
-
-            
-            #CLEAR CLOSES LIST TO MANTAIN LAST 22 LINES ONLY
-            closes.pop(0)
-            
-            if len(closes) == (RSI_PERIOD + 1):
-                last_close.to_csv('positions.csv', index=False)
-                print('--- CRIOU O CSV ---')
-
-            
-
-            last_close = df_closes.iloc[-1:]
-
-            # WRITES LAST LINE ON CSV
-            last_close.to_csv('positions.csv', mode='a', header=True, index=False)
+        in_position = process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD)
 
 
 if __name__ == '__main__':
-        
+
     SOCKET = "wss://stream.binance.com:9443/ws/btcbrl@kline_1m"
 
-    RSI_PERIOD = 10
+    RSI_PERIOD = 22
     RSI_OVERBOUGHT = 70
-    RSI_OVERSOLD = 65
+    RSI_OVERSOLD = 50
     TRADE_SYMBOL = 'BTCBRL'
     TRADE_QUANTITY = 0.05
 
     closes = []
-    in_position = False
-    
-    df_closes = pd.DataFrame(columns =['close', 'var', 'positivo'
-                                       , 'negativo', 'media_positivos', 'media_negativo' 
-                                       ,'position','quantity','symbol'
-                                       ,'btc_balance','btcbrl_balance'
-                                       ,'profit_value' ,'in_position_after'])
-    
+    in_position = False    
 
     client = Client(cd.API_KEY, cd.API_SECRET, tld='us')
 
     # set profit baseline to drive sell/buy operations
-    baseline = 50
+    baseline = 300
 
     # start app
     print(' --- Hello World! We are starting! ---')
-
-    try:
-        print('Declare WebSocket')
-        ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
-        print(f'Run WebSocket - Start - {ws}')
-        ws.run_forever()
-        print('Run WebSocket - End')
-    except BinanceAPIException as e:
-        print(f'Error: {e}')
+    if not SIMULATE_FLG:
+        try:
+            print('Declare WebSocket')
+            ws = websocket.WebSocketApp(SOCKET, on_open=on_open, on_close=on_close, on_message=on_message)
+            print(f'Run WebSocket - Start - {ws}')
+            ws.run_forever()
+            print('Run WebSocket - End')
+        except BinanceAPIException as e:
+            print(f'Error: {e}')
+    else:
+        random_test(df_prices, closes, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD)
 
     print('End script')
