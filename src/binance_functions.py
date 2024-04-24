@@ -16,7 +16,9 @@ Because USER_DATA endpoints require signature:
 
 KEY = credentials.API_KEY
 SECRET = credentials.API_SECRET
-BASE_URL = "https://api.binance.com"  # production base url
+BASE_URL = "https://binance.com"  # production base url
+# BASE_URL = "https://bpay.binanceapi.com"  # production base url
+# BASE_URL = "https://api.binance.com"  # production base url
 # BASE_URL = 'https://testnet.binance.vision' # testnet base url
 
 def hashing(query_string):
