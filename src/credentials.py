@@ -1,7 +1,10 @@
 import os
+import json
 from google.cloud import secretmanager
 
-PROJECT_ID = os.environ.get("PROJECT_ID")
+PROJECT_ID = '578937709678' #os.environ.get("PROJECT_ID")
+
+print(f'Current GCP project: {PROJECT_ID}')
 
 def read_secret(secret_name):
 
@@ -15,12 +18,12 @@ def read_secret(secret_name):
     response = client.access_secret_version(request={"name": name})
 
     # Decode secret content
-    secret_value = response.payload.data.decode("UTF-8")
+    secret_value = json.loads(response.payload.data.decode("UTF-8"))
 
     return secret_value
 
-if _name_ == '_main_':
-    secret_data = read_secret('binance-cred')
 
-    app_key = secret_data['app_key']
-    app_secret = secret_data['app_secret']
+secret_data = read_secret('binance-cred')
+
+API_KEY = secret_data['app_key']
+API_SECRET = secret_data['app_secret']

@@ -2,8 +2,8 @@ import hmac
 import time
 import hashlib
 import requests
-import credentials
 import pandas as pd
+import credentials
 from urllib.parse import urlencode
 
 """
@@ -14,9 +14,11 @@ Because USER_DATA endpoints require signature:
 
 """
 
-KEY = credentials.app_key
-SECRET = credentials.app_secret
-BASE_URL = "https://api.binance.com"  # production base url
+KEY = credentials.API_KEY
+SECRET = credentials.API_SECRET
+BASE_URL = "https://binance.com"  # production base url
+# BASE_URL = "https://bpay.binanceapi.com"  # production base url
+# BASE_URL = "https://api.binance.com"  # production base url
 # BASE_URL = 'https://testnet.binance.vision' # testnet base url
 
 def hashing(query_string):
