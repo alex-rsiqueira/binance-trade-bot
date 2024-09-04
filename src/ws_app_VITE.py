@@ -2,7 +2,7 @@ import websocket
 import json
 import numpy as np
 import pandas as pd
-import credentials as cd
+import credentials_alex as cd
 import binance_functions
 import time
 import hashlib
@@ -40,7 +40,7 @@ df_prices = pd.DataFrame(columns =['close', 'var', 'positivo'
 SIMULATE_FLG = False
 
 def get_symbol_info(symbol):
-    url = 'https://api.binance.com/api/v3/exchangeInfo'
+    url = 'https://api3.binance.com/api/v3/exchangeInfo'
     response = requests.get(url)
     
     if response.status_code == 200:
@@ -53,7 +53,11 @@ def get_symbol_info(symbol):
         except ValueError:
             raise Exception("Erro ao converter a resposta da API para JSON.")
     else:
-        raise Exception(f"Erro na requisição GET_SYMBOL_INFO: {response.status_code} - {response.text}")
+        raise Exception(f"Erro na requisição: {response.status_code} - {response.text}")
+
+def get_decimal_places(step_size):
+    """Calculate the number of decimal places based on the step size."""
+    return max(0, len(str(step_size).split('.')[1].rstrip('0')))
 
 def round_to_step_size(quantity, step_size):
     # Certifique-se de que quantity e step_size são floats
@@ -104,22 +108,11 @@ def place_order(symbol, side, quantity, price=None, order_type="MARKET"):
     headers = {'X-MBX-APIKEY': BINANCE_API_KEY}
     
     # Formata a quantidade para garantir que está no formato correto
-    quantity = f"{quantity:.8f}".rstrip('0').rstrip('.')
+    quantity = f"{quantity:.{QTY_PRECISION}f}".rstrip('0').rstrip('.')
     print('quantity before: ', quantity)
-   
-    symbol_info = get_symbol_info(symbol)
-    filters = symbol_info['filters']
-    # lot_size_filter = filters['filterType'=='LOT_SIZE']  blablabla
-    # print(' lot_size_filter:::', lot_size_filter )
-    # step_size = 0.0010 #FOR BNB
-    step_size = 0.10000000 #FOR VITE
-    # print(' step_size:::', step_size )
 
-    # Ajuste a quantidade
-    step_size = f"{step_size:.8f}".rstrip('0').rstrip('.')
-
-    quantity = round_to_step_size(quantity, step_size)
-    quantity = "{0:.8f}".format(quantity)
+    quantity = round_to_step_size(quantity, STEP_SIZE)
+    quantity = f"{0:.{QTY_PRECISION}f}".format(quantity)
     print('quantity after: ', quantity)
 
 
@@ -134,7 +127,7 @@ def place_order(symbol, side, quantity, price=None, order_type="MARKET"):
     }
     
     if order_type == "LIMIT" and price is not None:
-        params["price"] = f"{price:.8f}".rstrip('0').rstrip('.')
+        params["price"] = f"{price:.{QTY_PRECISION}f}".rstrip('0').rstrip('.')
     
     # Obtenção do timestamp e assinatura
     timestamp, signature = get_timestamp_signature(params)
@@ -235,7 +228,11 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
             # print('profit_value: ', profit_value)
 
             # Get WALLET_COIN balance before order
-            wltcoin_balance_before = get_balance('USDT')
+            wltcoin_balance_before = get_balance(WLT_COIN)
+            
+            profit_value_perc = profit_value/BASELINE
+            
+            print('profit_value: ', profit_value, ' || ', 'profit_valu_perc: ', profit_value_perc*100, '%', ' || ', 'wltcoin_balance_before: ', wltcoin_balance_before)
             
             # convert profit in WALLET_COIN to BTC
             # TRADE_QUANTITY = BASELINE / float(close)
@@ -257,7 +254,7 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                         
 
                     # Get WALLET_COIN balance after order
-                    wltcoin_balance_after = get_balance('USDT')
+                    wltcoin_balance_after = get_balance(WLT_COIN)
                     print('lucro calculado: ', profit_value)
                     print('SALDO R$: ', wltcoin_balance_after)
                     
@@ -301,7 +298,7 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                 profit_value = coin_wltcoin_balance - BASELINE
 
                 # get WALLET_COIN free balance
-                wltcoin_balance_before = get_balance('USDT')
+                wltcoin_balance_before = get_balance(WLT_COIN)
                 # print('WALLET_COIN_balance: ', wltcoin_balance_before)
 
                 # convert WALLET_COIN balance to BTC
@@ -327,7 +324,7 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                         in_position = True
 
                     # Get WALLET_COIN balance after order
-                    wltcoin_balance_after = get_balance('USDT')
+                    wltcoin_balance_after = get_balance(WLT_COIN)
                     print('SALDO R$: ', wltcoin_balance_after)
                     
                     # print(f'RSI: {rsi} < RSI_OVERSOLD: {RSI_OVERSOLD}. Comprando...')
@@ -411,10 +408,16 @@ if __name__ == '__main__':
     RSI_OVERBOUGHT = 70
     RSI_OVERSOLD = 30
     TRADE_SYMBOL = f'{COIN_CODE}{WLT_COIN}'
-    # TRADE_QUANTITY = 0.010 #FOR BNB
-    TRADE_QUANTITY = 1.00 #FOR PEPE
     MIN_PROFIT = 0.04
-    MIN_OP = 5
+
+    symbol_info = get_symbol_info(TRADE_SYMBOL)
+    filters = symbol_info['filters']
+
+    QTY_PRECISION = symbol_info['baseAssetPrecision']
+    STEP_SIZE = next(f['stepSize'] for f in filters if f['filterType'] == 'LOT_SIZE')
+    MIN_OP = float(next(f['minNotional'] for f in filters if f['filterType'] == 'NOTIONAL'))
+    STEP_SIZE_PRECISION = get_decimal_places(STEP_SIZE)
+    STEP_SIZE = f"{STEP_SIZE:.{STEP_SIZE_PRECISION}f}".rstrip('0').rstrip('.')
 
     closes = []
     in_position = True    
