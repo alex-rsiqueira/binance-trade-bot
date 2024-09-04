@@ -88,6 +88,22 @@ def get_balance(symbol,type='free'):
     # return balance from the symbol and type selected
     return int(df_balances[df_balances['asset'] == symbol][type])
 
+def get_symbol_info(symbol):
+    url = 'https://api.binance.com/api/v3/exchangeInfo'
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            for s in data['symbols']:
+                if s['symbol'] == symbol:
+                    return s
+            raise Exception("Símbolo não encontrado.")
+        except ValueError:
+            raise Exception("Erro ao converter a resposta da API para JSON.")
+    else:
+        raise Exception(f"Erro na requisição: {response.status_code} - {response.text}")
+
 """ ======  end of functions ====== 
 
 ### public data endpoint, call send_public_request #####
