@@ -109,7 +109,7 @@ def sell_asset(symbol, quantity):
         raise Exception(f"Erro na requisição: {response.status_code} - {response.text}")
 
 # # Exemplo de uso
-symbol_info = get_symbol_info('PEPEUSDT')
+symbol_info = get_symbol_info('BNBBRL')
 filters = symbol_info['filters']
 print(symbol_info)
 

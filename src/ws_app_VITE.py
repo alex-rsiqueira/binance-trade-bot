@@ -2,7 +2,7 @@ import websocket
 import json
 import numpy as np
 import pandas as pd
-import credentials_alex as cd
+import credentials as cd
 import binance_functions
 import time
 import hashlib
@@ -24,9 +24,8 @@ from binance.enums import *
 ########### RULES ########### 
 
 
-
-BINANCE_SECRET_KEY = cd.app_secret_py_automation
-BINANCE_API_KEY = cd.app_key_py_automation
+BINANCE_API_KEY = cd.API_KEY
+BINANCE_SECRET_KEY = cd.SECRET_KEY
 
 price_list = []
 df_prices = pd.DataFrame(columns =['close', 'var', 'positivo'
@@ -57,7 +56,7 @@ def get_symbol_info(symbol):
 
 def get_decimal_places(step_size):
     """Calculate the number of decimal places based on the step size."""
-    return max(0, len(str(step_size).split('.')[1].rstrip('0')))
+    return max(0, len(str(step_size).split('.')[1]))
 
 def round_to_step_size(quantity, step_size):
     # Certifique-se de que quantity e step_size são floats
@@ -104,7 +103,7 @@ def get_timestamp_signature(params):
     return timestamp, signature
 
 def place_order(symbol, side, quantity, price=None, order_type="MARKET"):
-    url = 'https://api.binance.com/api/v3/order'
+    url = 'https://api3.binance.com/api/v3/order'
     headers = {'X-MBX-APIKEY': BINANCE_API_KEY}
     
     # Formata a quantidade para garantir que está no formato correto
@@ -112,7 +111,7 @@ def place_order(symbol, side, quantity, price=None, order_type="MARKET"):
     print('quantity before: ', quantity)
 
     quantity = round_to_step_size(quantity, STEP_SIZE)
-    quantity = f"{0:.{QTY_PRECISION}f}".format(quantity)
+    quantity = f"{float(quantity):.{QTY_PRECISION}f}"
     print('quantity after: ', quantity)
 
 
@@ -229,7 +228,7 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
 
             # Get WALLET_COIN balance before order
             wltcoin_balance_before = get_balance(WLT_COIN)
-            
+
             profit_value_perc = profit_value/BASELINE
             
             print('profit_value: ', profit_value, ' || ', 'profit_valu_perc: ', profit_value_perc*100, '%', ' || ', 'wltcoin_balance_before: ', wltcoin_balance_before)
@@ -400,15 +399,15 @@ def on_message(ws, message):
 
 if __name__ == '__main__':
 
-    COIN_CODE = 'VITE'
-    WLT_COIN = 'USDT'
+    COIN_CODE = 'BNB'
+    WLT_COIN = 'BRL'
     SOCKET = f"wss://stream.binance.com:9443/ws/{COIN_CODE.lower()}{WLT_COIN.lower()}@kline_1m"
 
-    RSI_PERIOD = 15
+    RSI_PERIOD = 22
     RSI_OVERBOUGHT = 70
     RSI_OVERSOLD = 30
     TRADE_SYMBOL = f'{COIN_CODE}{WLT_COIN}'
-    MIN_PROFIT = 0.04
+    MIN_PROFIT = 0.02
 
     symbol_info = get_symbol_info(TRADE_SYMBOL)
     filters = symbol_info['filters']
@@ -417,7 +416,7 @@ if __name__ == '__main__':
     STEP_SIZE = next(f['stepSize'] for f in filters if f['filterType'] == 'LOT_SIZE')
     MIN_OP = float(next(f['minNotional'] for f in filters if f['filterType'] == 'NOTIONAL'))
     STEP_SIZE_PRECISION = get_decimal_places(STEP_SIZE)
-    STEP_SIZE = f"{STEP_SIZE:.{STEP_SIZE_PRECISION}f}".rstrip('0').rstrip('.')
+    STEP_SIZE = f"{float(STEP_SIZE):.{STEP_SIZE_PRECISION}f}".rstrip('0').rstrip('.')
 
     closes = []
     in_position = True    
@@ -425,7 +424,7 @@ if __name__ == '__main__':
     client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY, tld='us')
 
     # set profit BASELINE to drive sell/buy operations
-    BASELINE = 10
+    BASELINE = 90
 
     # start app
     print(' --- Hello World! We are starting! ---')
