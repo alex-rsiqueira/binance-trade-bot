@@ -2,7 +2,7 @@ import websocket
 import json
 import numpy as np
 import pandas as pd
-import credentials_alex as cd
+import credentials as cd
 import binance_functions
 import time
 import hashlib
@@ -24,9 +24,8 @@ from binance.enums import *
 ########### RULES ########### 
 
 
-
-BINANCE_SECRET_KEY = cd.SECRET_KEY
 BINANCE_API_KEY = cd.API_KEY
+BINANCE_SECRET_KEY = cd.SECRET_KEY
 
 price_list = []
 df_prices = pd.DataFrame(columns =['close', 'var', 'positivo'
@@ -420,7 +419,7 @@ if __name__ == '__main__':
     STEP_SIZE = f"{float(STEP_SIZE):.{STEP_SIZE_PRECISION}f}".rstrip('0').rstrip('.')
 
     closes = []
-    in_position = False    
+    in_position = True    
 
     client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY, tld='us')
 
