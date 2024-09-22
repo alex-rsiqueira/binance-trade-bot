@@ -23,7 +23,7 @@ def read_secret(secret_name):
     return secret_value
 
 
-secret_data = read_secret('binance-cred-alex')
+secret_data = read_secret('binance-cred-alex') #binance-cred-murilo
 
 API_KEY = secret_data['app_key']
 SECRET_KEY = secret_data['app_secret']

@@ -4,12 +4,14 @@ import numpy as np
 import pandas as pd
 import credentials as cd
 import binance_functions
+import support
 import time
 import hashlib
 import hmac
-from urllib.parse import urlencode
 import requests
 import math
+from urllib.parse import urlencode
+from datetime import datetime
 
 from binance.client import Client, BinanceAPIException
 from binance.enums import *
@@ -28,14 +30,28 @@ BINANCE_API_KEY = cd.API_KEY
 BINANCE_SECRET_KEY = cd.SECRET_KEY
 
 price_list = []
-df_prices = pd.DataFrame(columns =['close', 'var', 'positivo'
-                                       , 'negativo', 'media_positivos', 'media_negativo' 
-                                       ,'position','quantity','symbol'
-                                       ,'coin_balance','coin_wltcoin_balance'
-                                       ,'profit_value' ,'in_position_after'
-                                       ,'hold','venda','compra'
-                                       ,'wltcoin_balance_before','wltcoin_balance_after'
-                                    ])
+df_prices = pd.DataFrame({'user': pd.Series(dtype='str')
+                            ,'close': pd.Series(dtype='float')
+                            ,'var': pd.Series(dtype='float')
+                            ,'positivo': pd.Series(dtype='float')
+                            ,'negativo': pd.Series(dtype='float')
+                            ,'media_positivos': pd.Series(dtype='float')
+                            ,'media_negativo' : pd.Series(dtype='float')
+                            ,'position': pd.Series(dtype='str')
+                            ,'quantity': pd.Series(dtype='float')
+                            ,'symbol': pd.Series(dtype='str')
+                            ,'coin_balance': pd.Series(dtype='float')
+                            ,'coin_wltcoin_balance': pd.Series(dtype='float')
+                            ,'profit_value': pd.Series(dtype='float')
+                            ,'in_position_before': pd.Series(dtype='bool')
+                            ,'in_position_after': pd.Series(dtype='bool')
+                            ,'hold': pd.Series(dtype='bool')
+                            ,'venda': pd.Series(dtype='bool')
+                            ,'compra': pd.Series(dtype='bool')
+                            ,'wltcoin_balance_before': pd.Series(dtype='float')
+                            ,'wltcoin_balance_after': pd.Series(dtype='float')
+                            ,'dt_insert': pd.Series(dtype='str')})
+
 SIMULATE_FLG = False
 
 def get_symbol_info(symbol):
@@ -62,7 +78,7 @@ def round_to_step_size(quantity, step_size):
     # Certifique-se de que quantity e step_size são floats
     quantity = float(quantity)
     step_size = float(step_size)
-    return math.floor(quantity / step_size) * step_size
+    return math.ceil(quantity / step_size) * step_size
 
 def get_balance(asset):
     url = 'https://api.binance.com/api/v3/account'
@@ -189,11 +205,13 @@ def calculate_rsi(close_prices, rsi_period):
     rsi = 100 - (100 / (1 + rs))
     return rsi.iloc[-1]  # Retorna apenas o último valor do RSI
 
-def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD, in_position):
+def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD):
     """
     Processa um novo preço recebido, atualiza o DataFrame de preços e verifica sinais de negociação com base no RSI.
     """
     try:
+        global in_position
+
         if not SIMULATE_FLG:
             price_list.append(float(close))
 
@@ -201,6 +219,9 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
         df_prices.loc[len(df_prices)] = {'close': float(close), 'RSI': None, 'compra': False, 'venda': False}
 
         if len(price_list) >= RSI_PERIOD:
+
+            dtinsert = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+
             # Calcula o RSI para a última linha
             rsi = calculate_rsi(df_prices['close'], RSI_PERIOD)
             print('RSI: ', rsi)
@@ -208,6 +229,10 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
             df_prices.at[len(df_prices) - 1, 'RSI'] = rsi
 
             # Calcula outras métricas
+            df_prices['user'] = 'Alexsander Siqueira' # 'Murilo Amaral'
+            df_prices['dt_insert'] = dtinsert
+            df_prices['in_position_before'] = in_position
+            df_prices['symbol'] = TRADE_SYMBOL
             df_prices['var'] = df_prices['close'].pct_change()
             df_prices['positivo'] = df_prices['var'].apply(lambda x: x if x > 0 else 0)
             df_prices['negativo'] = df_prices['var'].apply(lambda x: abs(x) if x < 0 else 0)
@@ -247,34 +272,32 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                     df_prices['in_position_before'] = in_position
                     # create sell order
                     order_succeeded = order(SIDE_SELL, TRADE_QUANTITY, TRADE_SYMBOL)                    
+                    
                     if order_succeeded:
                         print('VENDEU!')
                         in_position = False
                         
-
-                    # Get WALLET_COIN balance after order
-                    wltcoin_balance_after = get_balance(WLT_COIN)
-                    print('lucro calculado: ', profit_value)
-                    print('SALDO R$: ', wltcoin_balance_after)
-                    
-                    # print(f'RSI: {rsi} > RSI_OVERBOUGHT: {RSI_OVERBOUGHT}. Vendendo...')
-                    df_prices.at[len(df_prices) - 1, 'hold'] = False
-                    df_prices.at[len(df_prices) - 1, 'venda'] = True
-                    df_prices['position'] = 'SELL'
-                    df_prices['quantity'] = TRADE_QUANTITY
-                    df_prices['symbol'] = TRADE_SYMBOL
-                    df_prices['wltcoin_balance_before'] = wltcoin_balance_before
-                    df_prices['wltcoin_balance_after'] = wltcoin_balance_after
-                    df_prices['coin_balance'] = coin_balance
-                    df_prices['coin_wltcoin_balance'] = coin_wltcoin_balance
-                    df_prices['profit_value'] = profit_value
-                    df_prices['in_position_after'] = in_position
+                        # Get WALLET_COIN balance after order
+                        wltcoin_balance_after = get_balance(WLT_COIN)
+                        print('lucro calculado: ', profit_value)
+                        print('SALDO R$: ', wltcoin_balance_after)
+                        
+                        # print(f'RSI: {rsi} > RSI_OVERBOUGHT: {RSI_OVERBOUGHT}. Vendendo...')
+                        df_prices.at[len(df_prices) - 1, 'hold'] = False
+                        df_prices.at[len(df_prices) - 1, 'venda'] = True
+                        df_prices['position'] = 'SELL'
+                        df_prices['quantity'] = TRADE_QUANTITY
+                        df_prices['wltcoin_balance_before'] = wltcoin_balance_before
+                        df_prices['wltcoin_balance_after'] = wltcoin_balance_after
+                        df_prices['coin_balance'] = coin_balance
+                        df_prices['coin_wltcoin_balance'] = coin_wltcoin_balance
+                        df_prices['profit_value'] = profit_value
+                        df_prices['in_position_after'] = in_position
                 else:
 
                     # print('In position to sell, but there''s no profit over the BASELINE')
                     df_prices['position'] = 'SIDE_SELL_NO_PROFITS'
                     df_prices['quantity'] = TRADE_QUANTITY
-                    df_prices['symbol'] = TRADE_SYMBOL
                     df_prices['wltcoin_balance_before'] = wltcoin_balance_before
                     df_prices['coin_balance'] = coin_balance
                     df_prices['coin_wltcoin_balance'] = coin_wltcoin_balance
@@ -304,10 +327,13 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                 # TRADE_QUANTITY = wltcoin_balance_before / float(close)
                 # TRADE_QUANTITY = BASELINE / float(close)
                 # Define se é a primeira compra naquela moeda, caso sim compra o baseline, senão somente o valor mínimo de operação.
+                print(f'coin_balance: {coin_balance}')
                 if coin_balance > 0:
                     TRADE_QUANTITY = MIN_OP / float(close)
                 else:
                     TRADE_QUANTITY = BASELINE / float(close)
+                print(f'TRADE_QUANTITY: {TRADE_QUANTITY}')
+                print(f'wltcoin_balance_before: {wltcoin_balance_before}')
 
                 if (wltcoin_balance_before / float(close)) > TRADE_QUANTITY: # Verifica se tem mais saldo do que está tentando comprar
                     
@@ -322,22 +348,23 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                         print('COMPROU')
                         in_position = True
 
-                    # Get WALLET_COIN balance after order
-                    wltcoin_balance_after = get_balance(WLT_COIN)
-                    print('SALDO R$: ', wltcoin_balance_after)
-                    
-                    # print(f'RSI: {rsi} < RSI_OVERSOLD: {RSI_OVERSOLD}. Comprando...')
-                    df_prices.at[len(df_prices) - 1, 'hold'] = False
-                    df_prices.at[len(df_prices) - 1, 'compra'] = True
-                    df_prices['position'] = 'BUY'
-                    df_prices['quantity'] = TRADE_QUANTITY
-                    df_prices['symbol'] = TRADE_SYMBOL
-                    df_prices['wltcoin_balance_before'] = wltcoin_balance_before
-                    df_prices['wltcoin_balance_after'] = wltcoin_balance_after
-                    df_prices['coin_balance'] = coin_balance
-                    df_prices['coin_wltcoin_balance'] = coin_wltcoin_balance
-                    df_prices['profit_value'] = profit_value
-                    df_prices['in_position_after'] = in_position
+                        # Get WALLET_COIN balance after order
+                        wltcoin_balance_after = get_balance(WLT_COIN)
+                        print('SALDO R$: ', wltcoin_balance_after)
+                        
+                        # print(f'RSI: {rsi} < RSI_OVERSOLD: {RSI_OVERSOLD}. Comprando...')
+                        df_prices.at[len(df_prices) - 1, 'hold'] = False
+                        df_prices.at[len(df_prices) - 1, 'venda'] = False
+                        df_prices.at[len(df_prices) - 1, 'compra'] = True
+                        df_prices['position'] = 'BUY'
+                        df_prices['quantity'] = TRADE_QUANTITY
+                        df_prices['symbol'] = TRADE_SYMBOL
+                        df_prices['wltcoin_balance_before'] = wltcoin_balance_before
+                        df_prices['wltcoin_balance_after'] = wltcoin_balance_after
+                        df_prices['coin_balance'] = coin_balance
+                        df_prices['coin_wltcoin_balance'] = coin_wltcoin_balance
+                        df_prices['profit_value'] = profit_value
+                        df_prices['in_position_after'] = in_position
 
                 else:
                     
@@ -361,12 +388,16 @@ def process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, 
                 df_prices.at[len(df_prices) - 1, 'hold'] = True
             
             # WRITES LAST LINE ON CSV
+            # last_close = df_prices.iloc[-1:]
+            # if len(closes) == RSI_PERIOD:
+            #     last_close.to_csv('positions-VITE.csv', header=True, index=False)
+            #     print('--- CRIOU O CSV ---')
+            # else:
+            #     last_close.to_csv('positions-VITE.csv', mode='a', header=False, index=False)
+
+            # Writes position to BigQuery
             last_close = df_prices.iloc[-1:]
-            if len(closes) == RSI_PERIOD:
-                last_close.to_csv('positions-VITE.csv', header=True, index=False)
-                print('--- CRIOU O CSV ---')
-            else:
-                last_close.to_csv('positions-VITE.csv', mode='a', header=False, index=False)
+            support.insert_db(last_close,'tb_trade_positions')
         
         return in_position
     except Exception as e:
@@ -384,15 +415,14 @@ def on_message(ws, message):
     Processa a mensagem JSON para obter o preço de fechamento e chama a função de processamento de preço.
     """
     try:
-        global in_position
         json_message = json.loads(message)
         candle = json_message['k']
         is_candle_closed = candle['x']
         close = candle['c']
         
         if is_candle_closed:
-            print('CLOSE:: ', close)
-            in_position = process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD, in_position)
+            print('CLOSE:', close)
+            process_new_price(close, df_prices, price_list, RSI_PERIOD, RSI_OVERBOUGHT, RSI_OVERSOLD)
 
     except Exception as e:
         print(e)

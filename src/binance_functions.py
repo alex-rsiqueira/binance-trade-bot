@@ -4,6 +4,7 @@ import hashlib
 import requests
 import pandas as pd
 import credentials
+from google.cloud import bigquery
 from urllib.parse import urlencode
 
 """
@@ -103,6 +104,7 @@ def get_symbol_info(symbol):
             raise Exception("Erro ao converter a resposta da API para JSON.")
     else:
         raise Exception(f"Erro na requisição: {response.status_code} - {response.text}")
+
 
 """ ======  end of functions ====== 
 
